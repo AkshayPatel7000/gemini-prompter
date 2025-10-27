@@ -127,10 +127,14 @@ export function GeneratePage({
     }
 
     try {
-      const prompt = await generatePrompt(uploadedFile);
-      if (prompt) {
-        setGeneratedPrompt(prompt);
+      const result = await generatePrompt(uploadedFile);
+      if (result) {
+        setGeneratedPrompt(result.prompt);
         onCreditsChange(credits - 1);
+        // Store promptId for future use (like sharing, editing, etc.)
+        if (result.promptId) {
+          console.log('Prompt saved with ID:', result.promptId);
+        }
       }
     } catch (error) {
       // Error is already handled by the hook

@@ -5,16 +5,20 @@ import { validateImageFile, fileToBase64 } from '@/lib/image-utils';
 interface GeneratePromptResponse {
   success: boolean;
   prompt?: string;
+  promptId?: string;
   metadata?: {
     wordCount: number;
     characterCount: number;
     generatedAt: string;
   };
+  warning?: string;
   error?: string;
 }
 
 interface UseGeneratePromptReturn {
-  generatePrompt: (file: File) => Promise<string | null>;
+  generatePrompt: (
+    file: File
+  ) => Promise<{ prompt: string; promptId?: string } | null>;
   isLoading: boolean;
   error: string | null;
   clearError: () => void;
@@ -29,7 +33,9 @@ export function useGeneratePrompt(): UseGeneratePromptReturn {
   }, []);
 
   const generatePrompt = useCallback(
-    async (file: File): Promise<string | null> => {
+    async (
+      file: File
+    ): Promise<{ prompt: string; promptId?: string } | null> => {
       setIsLoading(true);
       setError(null);
 
@@ -68,11 +74,18 @@ export function useGeneratePrompt(): UseGeneratePromptReturn {
         }
 
         // Show success message
-        toast.success('Prompt generated successfully!', {
+        const successMessage = data.warning
+          ? 'Prompt generated (not saved to database)'
+          : 'Prompt generated and saved successfully!';
+
+        toast.success(successMessage, {
           description: `Generated ${data.metadata?.wordCount || 0} words`,
         });
 
-        return data.prompt;
+        return {
+          prompt: data.prompt,
+          promptId: data.promptId,
+        };
       } catch (err: unknown) {
         const errorMessage =
           err instanceof Error ? err.message : 'Failed to generate prompt';

@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { GoogleGenAI } from '@google/genai';
 import { auth } from '@/lib/auth';
+import dbConnect from '@/lib/db';
+import Prompt from '@/lib/models/Prompt';
+import User from '@/lib/models/User';
 
 // Initialize Gemini AI
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY! });
@@ -155,16 +158,67 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Return successful response
-    return NextResponse.json({
-      success: true,
-      prompt: cleanPrompt,
-      metadata: {
-        wordCount: cleanPrompt.split(' ').length,
-        characterCount: cleanPrompt.length,
-        generatedAt: new Date().toISOString(),
-      },
-    });
+    // Prepare metadata
+    const metadata = {
+      wordCount: cleanPrompt.split(' ').length,
+      characterCount: cleanPrompt.length,
+      generatedAt: new Date(),
+      model: 'models/gemini-2.0-flash-lite',
+    };
+
+    // Save to database
+    try {
+      await dbConnect();
+
+      // Find or create user
+      let user = await User.findOne({ email: session.user.email });
+      if (!user) {
+        user = await User.create({
+          name: session.user.name,
+          email: session.user.email,
+          image: session.user.image,
+          credits: 10,
+        });
+      }
+
+      // Create the prompt document
+      const promptDoc = await Prompt.create({
+        prompt: cleanPrompt,
+        imageData: base64Data, // Store the base64 image data
+        imageType: imageType,
+        userId: user._id,
+        isPublic: true, // Default to public, can be changed later
+        isGenerated: true,
+        metadata: metadata,
+        tags: [], // Can be enhanced later with AI-generated tags
+        category: 'AI Generated', // Default category
+      });
+
+      // Return successful response with database ID
+      return NextResponse.json({
+        success: true,
+        prompt: cleanPrompt,
+        promptId: promptDoc._id.toString(),
+        metadata: {
+          wordCount: metadata.wordCount,
+          characterCount: metadata.characterCount,
+          generatedAt: metadata.generatedAt.toISOString(),
+        },
+      });
+    } catch (dbError) {
+      console.error('Database error:', dbError);
+      // Still return the prompt even if database save fails
+      return NextResponse.json({
+        success: true,
+        prompt: cleanPrompt,
+        metadata: {
+          wordCount: metadata.wordCount,
+          characterCount: metadata.characterCount,
+          generatedAt: metadata.generatedAt.toISOString(),
+        },
+        warning: 'Prompt generated successfully but not saved to database',
+      });
+    }
   } catch (error: unknown) {
     const errorMessage =
       error instanceof Error ? error.message : 'Unknown error';
